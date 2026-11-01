@@ -39,6 +39,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("command -v hypridle >/dev/null && hypridle")
     hl.exec_cmd("command -v monitor-sensor >/dev/null && $HOME/.local/bin/surface-rotate")
     hl.exec_cmd("command -v squeekboard >/dev/null && squeekboard")
+    hl.exec_cmd("command -v squeekboard >/dev/null && $HOME/.local/bin/osk-auto watch")
     hl.exec_cmd("command -v hyprpm >/dev/null && hyprpm reload -n")
 end)
 
@@ -315,6 +316,12 @@ hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%-"
 hl.bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true })
 hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+-- Type Cover folded back = tablet mode: let the on-screen keyboard
+-- auto-show on text fields (see osk-auto). Detaching is handled there.
+local tabletSwitch = "switch:%s:Microsoft Surface Type Cover Tablet Mode Switch"
+hl.bind(tabletSwitch:format("on"),  hl.dsp.exec_cmd(home .. "/.local/bin/osk-auto tablet on"),  { locked = true })
+hl.bind(tabletSwitch:format("off"), hl.dsp.exec_cmd(home .. "/.local/bin/osk-auto tablet off"), { locked = true })
+
 hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true })
 
 

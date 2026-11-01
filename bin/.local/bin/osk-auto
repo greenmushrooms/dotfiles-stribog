@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Let squeekboard pop up on text fields only when there is no usable
+# hardware keyboard: the Type Cover is detached, or folded back (tablet
+# mode). With the cover in use, auto-show is off and the keyboard is hidden.
+# The bottom-edge swipe / `osk toggle` works either way.
+#
+#   osk-auto watch         run the watcher (started from hyprland.lua)
+#   osk-auto tablet on|off called by the Tablet Mode Switch binds
+#   osk-auto refresh       re-check now
+#
+# squeekboard follows the GNOME a11y setting screen-keyboard-enabled
+# (stored in dconf), so flipping that is all it takes.
+
+set -u
+
+STATE="${XDG_RUNTIME_DIR:-/tmp}/osk-tablet-mode"
+KEY="org.gnome.desktop.a11y.applications screen-keyboard-enabled"
+# Hardware keyboards that count. Override for other machines.
+KB_PATTERN=${OSK_KB_PATTERN:-type-cover-keyboard}
+
+has_keyboard() {
+  hyprctl devices -j 2>/dev/null \
+    | grep -o '"name": *"[^"]*"' | grep -q -- "$KB_PATTERN"
+}
+
+refresh() {
+  local want=false
+  [ "$(cat "$STATE" 2>/dev/null)" = on ] && want=true
+  has_keyboard || want=true
+
+  [ "$(gsettings get $KEY)" = "$want" ] || gsettings set $KEY "$want"
+  # Cover is back in use: drop a keyboard left open in tablet mode.
+  [ "$want" = false ] && "$HOME/.local/bin/osk" hide >/dev/null 2>&1
+  return 0
+}
+
+case "${1:-refresh}" in
+  tablet)
+    echo "${2:-off}" > "$STATE"
+    refresh
+    ;;
+  watch)
+    refresh
+    # Re-check whenever an input device comes or goes (cover attach/detach).
+    # Events arrive in bursts, so wait for them to settle before checking.
+    udevadm monitor --udev --subsystem-match=input 2>/dev/null \
+      | while read -r _; do
+          while read -r -t 1 _; do :; done
+          refresh
+        done
+    ;;
+  refresh) refresh ;;
+  *) echo "usage: osk-auto [watch|refresh|tablet on|off]" >&2; exit 2 ;;
+esac
