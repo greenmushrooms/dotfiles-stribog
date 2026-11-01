@@ -32,6 +32,14 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("hyprpaper")
     hl.exec_cmd("waybar")
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
+
+    -- Lock/idle, Surface auto-rotate, on-screen keyboard, plugins (hyprgrass).
+    -- Each is skipped if the program isn't installed, so this stays safe on
+    -- machines without them.
+    hl.exec_cmd("command -v hypridle >/dev/null && hypridle")
+    hl.exec_cmd("command -v monitor-sensor >/dev/null && $HOME/.local/bin/surface-rotate")
+    hl.exec_cmd("command -v squeekboard >/dev/null && squeekboard")
+    hl.exec_cmd("command -v hyprpm >/dev/null && hyprpm reload -n")
 end)
 
 
@@ -167,6 +175,57 @@ hl.gesture({
     action    = "workspace",
 })
 
+-- Touchscreen gestures (hyprgrass plugin, loaded by `hyprpm reload` above).
+-- Skipped until the plugin is loaded; hyprpm reloads the config once it is.
+if hl.plugin and hl.plugin.hyprgrass then
+    hl.config({
+        gestures = {
+            workspace_swipe_touch = true,
+        },
+        plugin = {
+            hyprgrass = {
+                sensitivity      = 4.0,  -- default is too low on tablet screens
+                long_press_delay = 400,
+                edge_margin      = 15,
+            },
+        },
+    })
+
+    -- 3-finger horizontal swipe: switch workspace
+    hl.plugin.hyprgrass.gesture({
+        pattern = { kind = "swipe", fingers = 3, direction = "horizontal" },
+        action  = "workspace",
+    })
+
+    -- Swipe up from the bottom edge: toggle on-screen keyboard
+    hl.plugin.hyprgrass.bind({
+        pattern = { kind = "edge", origin = "d", direction = "u" },
+        action  = hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/osk toggle"),
+    })
+
+    -- Swipe down from the top edge: app launcher
+    hl.plugin.hyprgrass.bind({
+        pattern = { kind = "edge", origin = "u", direction = "d" },
+        action  = hl.dsp.exec_cmd(menu),
+    })
+
+    -- Swipe in from the left / right edge: previous / next workspace
+    hl.plugin.hyprgrass.bind({
+        pattern = { kind = "edge", origin = "l", direction = "r" },
+        action  = hl.dsp.focus({ workspace = "e-1" }),
+    })
+    hl.plugin.hyprgrass.bind({
+        pattern = { kind = "edge", origin = "r", direction = "l" },
+        action  = hl.dsp.focus({ workspace = "e+1" }),
+    })
+
+    -- 3-finger tap: toggle floating
+    hl.plugin.hyprgrass.bind({
+        pattern = { kind = "tap", fingers = 3 },
+        action  = hl.dsp.window.float({ action = "toggle" }),
+    })
+end
+
 hl.device({
     name        = "epic-mouse-v1",
     sensitivity = -0.5,
@@ -193,6 +252,9 @@ hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("pkill -SIGUSR1 waybar"))
 hl.bind(mainMod .. " + W",         hl.dsp.exec_cmd(home .. "/.local/bin/wifi-menu"))
 hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd(home .. "/.local/bin/vpn toggle"))
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen())
+hl.bind(mainMod .. " + CTRL + L",  hl.dsp.exec_cmd("loginctl lock-session"))
+hl.bind(mainMod .. " + O",         hl.dsp.exec_cmd(home .. "/.local/bin/osk toggle"))
+hl.bind(mainMod .. " + CTRL + R",  hl.dsp.exec_cmd(home .. "/.local/bin/surface-rotate lock"))
 
 -- Focus
 hl.bind(mainMod .. " + H",     hl.dsp.focus({ direction = "left" }))

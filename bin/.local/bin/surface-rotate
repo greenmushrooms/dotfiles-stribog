@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Auto-rotate the built-in screen plus touch and pen input from the
+# accelerometer (iio-sensor-proxy's monitor-sensor).
+#
+#   surface-rotate          run the watcher (started from hyprland.lua)
+#   surface-rotate lock     toggle rotation lock (keeps the current rotation)
+#
+# Override with env vars if needed: ROTATE_OUTPUT (default eDP-1),
+# ROTATE_SCALE (default 2).
+
+set -u
+
+OUTPUT=${ROTATE_OUTPUT:-eDP-1}
+SCALE=${ROTATE_SCALE:-2}
+LOCKFILE="${XDG_RUNTIME_DIR:-/tmp}/surface-rotate.locked"
+
+notify() {
+  hyprctl notify -1 2000 "rgb(33ccff)" "$1" >/dev/null 2>&1
+}
+
+if [ "${1:-}" = "lock" ]; then
+  if [ -e "$LOCKFILE" ]; then
+    rm -f "$LOCKFILE"
+    notify "Rotation unlocked"
+  else
+    touch "$LOCKFILE"
+    notify "Rotation locked"
+  fi
+  exit 0
+fi
+
+command -v monitor-sensor >/dev/null || {
+  echo "surface-rotate: monitor-sensor not found (install iio-sensor-proxy)" >&2
+  exit 1
+}
+
+# Only one watcher per session.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/surface-rotate.pid"
+flock -n 9 || exit 0
+
+# Hyprland transform: 0 normal, 1 = 90°, 2 = 180°, 3 = 270°.
+apply() {
+  local t
+  case "$1" in
+    normal)    t=0 ;;
+    left-up)   t=1 ;;
+    bottom-up) t=2 ;;
+    right-up)  t=3 ;;
+    *) return ;;
+  esac
+  [ -e "$LOCKFILE" ] && return
+  hyprctl eval "hl.monitor({ output = \"$OUTPUT\", mode = \"preferred\", position = \"auto\", scale = $SCALE, transform = $t })" >/dev/null
+  hyprctl eval "hl.config({ input = { touchdevice = { transform = $t, output = \"$OUTPUT\" }, tablet = { transform = $t, output = \"$OUTPUT\" } } })" >/dev/null
+}
+
+# monitor-sensor prints e.g. "=== Has accelerometer (orientation: normal, ...)"
+# at start and "Accelerometer orientation changed: left-up" on every change.
+monitor-sensor --accel 2>/dev/null | while IFS= read -r line; do
+  case "$line" in
+    *"orientation changed:"*) apply "${line##*: }" ;;
+    *"Has accelerometer (orientation: "*)
+      o=${line#*orientation: }
+      apply "${o%%[,)]*}"
+      ;;
+  esac
+done
