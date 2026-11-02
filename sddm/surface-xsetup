@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# SDDM Xsetup for the Surface: runs as root in the greeter's X server just
+# before the login screen appears (sddm.conf [X11] DisplayCommand).
+#
+#  1. Auto-rotate the screen, touch and pen from the accelerometer, for as
+#     long as the greeter is up.
+#  2. Open the theme's on-screen keyboard at start when there is no usable
+#     hardware keyboard (Type Cover detached or folded back, nothing on USB/BT).
+#
+# Installed by install-sddm.sh to /usr/local/lib/sddm/surface-xsetup.
+
+set -u
+
+# Keep whatever the stock Xsetup does.
+[ -x /usr/share/sddm/scripts/Xsetup ] && /usr/share/sddm/scripts/Xsetup
+
+THEME=$(sed -n 's/^Current=//p' /etc/sddm.conf.d/*.conf /etc/sddm.conf 2>/dev/null | tail -1)
+THEME_DIR=/usr/share/sddm/themes/${THEME:-sddm-astronaut-theme}
+THEME_CONF=$(sed -n 's/^ConfigFile=//p' "$THEME_DIR/metadata.desktop" 2>/dev/null)
+
+# Same skip list as ~/.local/bin/osk-auto: things that register as keyboards
+# but aren't (power buttons, the IPTS touch/pen, mice with a key interface).
+KB_IGNORE=${OSK_KB_IGNORE:-'video-bus|gpio-keys|virtual|power|sleep|button|hotkey|wmi|consumer-control|system-control|avrcp|click|mouse|ipts'}
+
+# ── On-screen keyboard ────────────────────────────────────────────────
+
+# A real keyboard has key + autorepeat events (EV=120013 / 12001f).
+has_keyboard() {
+  awk -v RS= -v ign="$KB_IGNORE" '
+    /B: EV=12001[3f]/ && /Handlers=[^\n]*kbd/ {
+      match($0, /N: Name="[^"]*"/); n = tolower(substr($0, RSTART, RLENGTH))
+      if (n !~ ign) found = 1
+    }
+    END { exit !found }' /proc/bus/input/devices
+}
+
+# Type Cover folded behind the screen: SW_TABLET_MODE is set.
+tablet_mode() {
+  python3 -I - <<'EOF'
+import fcntl, glob, os, sys
+EVIOCGSW = 0x8008451b          # _IOR('E', 0x1b, 8 bytes)
+SW_TABLET_MODE = 1
+for d in glob.glob("/sys/class/input/event*"):
+    try:
+        if int(open(d + "/device/capabilities/sw").read().split()[-1], 16) & (1 << SW_TABLET_MODE) == 0:
+            continue
+        fd = os.open("/dev/input/" + os.path.basename(d), os.O_RDONLY)
+        buf = bytearray(8)
+        fcntl.ioctl(fd, EVIOCGSW, buf)
+        os.close(fd)
+        if buf[0] & (1 << SW_TABLET_MODE):
+            sys.exit(0)
+    except (OSError, ValueError, IndexError):
+        pass
+sys.exit(1)
+EOF
+}
+
+if [ -n "$THEME_CONF" ]; then
+  show=false
+  { ! has_keyboard || tablet_mode; } && show=true
+  # SDDM merges <ConfigFile>.user over the theme config. Sizes are the OSK
+  # width as a fraction of the screen (theme default 0.4 is tiny here);
+  # the portrait one needs patch-theme.sh.
+  printf '[General]\nVirtualKeyboardAutoShow="%s"\nKeyboardSize="%s"\nKeyboardSizePortrait="%s"\n' \
+    "$show" "${OSK_KB_SIZE:-0.75}" "${OSK_KB_SIZE_PORTRAIT:-1.0}" > "$THEME_DIR/$THEME_CONF.user"
+fi
+
+# ── Auto-rotate ───────────────────────────────────────────────────────
+
+command -v monitor-sensor >/dev/null && command -v xrandr >/dev/null || exit 0
+
+OUTPUT=$(xrandr --query | awk '$2 == "connected" { print $1; exit }')
+[ -n "$OUTPUT" ] || exit 0
+
+rotate() {
+  local r
+  case "$1" in
+    normal)    r=normal ;;
+    left-up)   r=left ;;
+    bottom-up) r=inverted ;;
+    right-up)  r=right ;;
+    *) return ;;
+  esac
+  xrandr --output "$OUTPUT" --rotate "$r"
+  # Touch and pen follow the screen (map-to-output includes the rotation).
+  xinput list 2>/dev/null | sed -nE 's/.*IPTS.*id=([0-9]+).*pointer.*/\1/p' \
+    | while read -r id; do xinput map-to-output "$id" "$OUTPUT" 2>/dev/null; done
+}
+
+watch() {
+  local line o seen=0
+  exec < <(monitor-sensor --accel 2>/dev/null)
+  local sensor=$!
+  while :; do
+    if read -r -t 5 line; then
+      case "$line" in
+        *"orientation changed:"*) rotate "${line##*: }" ;;
+        *"Has accelerometer (orientation: "*)
+          o=${line#*orientation: }
+          rotate "${o%%[,)]*}"
+          ;;
+      esac
+    elif [ $? -le 128 ]; then
+      break                               # monitor-sensor exited
+    fi
+    # Stop once the greeter has come and gone (user logged in) or X is gone.
+    if pgrep -x 'sddm-greeter(-qt6)?' >/dev/null; then seen=1
+    elif [ $seen = 1 ]; then break; fi
+    xrandr --query >/dev/null 2>&1 || break
+  done
+  kill "$sensor" 2>/dev/null
+}
+
+# Detach so SDDM doesn't wait on us before showing the greeter.
+watch </dev/null >/dev/null 2>&1 &
+disown
+exit 0
