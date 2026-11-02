@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# stt -- local speech to text with Whisper (faster-whisper), fully offline.
+#
+#   stt              record from the default mic until you press Enter,
+#                    then print the text and copy it to the clipboard
+#   stt FILE         transcribe an audio file instead
+#   STT_MODEL=small.en stt    bigger/more accurate model (default base.en)
+#
+# Needs the venv from:  python3 -m venv ~/.local/share/tts/venv
+#                       ~/.local/share/tts/venv/bin/pip install faster-whisper
+
+set -euo pipefail
+
+PY=${STT_PYTHON:-$HOME/.local/share/tts/venv/bin/python}
+MODEL=${STT_MODEL:-base.en}
+
+[ -x "$PY" ] || { echo "stt: no venv at $PY (see header of $0)" >&2; exit 1; }
+
+if [ $# -ge 1 ]; then
+  in=$1
+else
+  in=$(mktemp --suffix=.wav)
+  trap 'rm -f "$in"' EXIT
+  echo "Recording... press Enter to stop." >&2
+  # ffmpeg via PipeWire's Pulse server; 16 kHz mono is what Whisper uses.
+  ffmpeg -nostdin -loglevel error -y -f pulse -i default -ac 1 -ar 16000 "$in" &
+  rec=$!
+  read -r _
+  kill -INT "$rec" 2>/dev/null; wait "$rec" 2>/dev/null || true
+  echo "Transcribing with $MODEL..." >&2
+fi
+
+text=$("$PY" -I - "$in" "$MODEL" <<'EOF'
+import subprocess, sys, numpy as np
+from faster_whisper import WhisperModel
+f, model = sys.argv[1], sys.argv[2]
+# Decode with ffmpeg ourselves: faster-whisper's PyAV loader breaks on
+# newer PyAV releases (unexpected keyword 'metadata_errors').
+raw = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "quiet", "-i", f,
+                      "-f", "s16le", "-ac", "1", "-ar", "16000", "-"],
+                     capture_output=True, check=True).stdout
+audio = np.frombuffer(raw, np.int16).astype(np.float32) / 32768
+segs, _ = WhisperModel(model, device="cpu", compute_type="int8").transcribe(
+    audio, beam_size=5, vad_filter=True)
+print(" ".join(s.text.strip() for s in segs))
+EOF
+)
+
+echo "$text"
+command -v wl-copy >/dev/null && [ -n "$text" ] && printf '%s' "$text" | wl-copy && echo "(copied)" >&2
+exit 0
