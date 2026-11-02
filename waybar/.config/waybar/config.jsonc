@@ -26,9 +26,11 @@
     // rejects, so clicks did nothing (Waybar #5008, fixed after 0.15.0).
     // The scroll commands likewise need the Lua dispatcher syntax.
     "ext/workspaces": {
-        "format": "{id}",
+        // {name} is Hyprland's workspace number; {id} is the protocol's own
+        // counter, which grows as workspaces come and go (2 showed as "4").
+        "format": "{name}",
         "on-click": "activate",
-        "sort-by-id": true,
+        "sort-by-name": true,
         "on-scroll-up": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'",
         "on-scroll-down": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'"
     },
