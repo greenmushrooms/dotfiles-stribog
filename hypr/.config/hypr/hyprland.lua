@@ -43,6 +43,10 @@ hl.on("hyprland.start", function()
     -- Lid closed + external monitor: built-in screen off (see lid-display).
     hl.exec_cmd("$HOME/.local/bin/lid-display watch")
     hl.exec_cmd("command -v hyprpm >/dev/null && hyprpm reload -n")
+    -- Secret service (org.freedesktop.secrets) for apps that store logins,
+    -- e.g. Komikku's server logins. KWallet only registers it once kwalletd6
+    -- is running, and that name isn't D-Bus activatable, so start it here.
+    hl.exec_cmd("command -v kwalletd6 >/dev/null && kwalletd6")
 end)
 
 
