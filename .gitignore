@@ -1,3 +1,5 @@
 hypr/.config/hypr/yay/
 waybar/.config/waybar/*.bak
 .claude/
+yay/
+nushell/.config/nushell/history.txt
