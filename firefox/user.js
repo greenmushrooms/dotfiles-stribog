@@ -18,3 +18,10 @@ user_pref("extensions.webextensions.fileSchemeAccess.requireOptIn", false);
 // case), and the selector window is launched from the ShowSelector flag in
 // profiles.ini before any profile pref is read. Untick "Show this when Firefox
 // opens" on the selector window itself, or run setup.sh with Firefox closed.
+
+// Two-finger horizontal swipe on the touchpad = Back / Forward, with the
+// arrow overlay (like macOS). Firefox handles this itself on Wayland;
+// Hyprland can't, because libinput reports two fingers as scrolling.
+user_pref("widget.disable-swipe-tracker", false);
+user_pref("browser.gesture.swipe.left", "Browser:BackOrBackDuplicate");
+user_pref("browser.gesture.swipe.right", "Browser:ForwardOrForwardDuplicate");
