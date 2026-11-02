@@ -19,8 +19,16 @@ hl.monitor({
 
 local terminal    = "ghostty"
 local fileManager = "ghostty -e yazi"
-local menu        = "hyprlauncher"
 local browser     = "firefox"
+
+-- App launcher: nwg-drawer, a full-screen icon grid (touch friendly).
+-- It runs resident (started below) so it opens instantly; calling
+-- `nwg-drawer` again just shows that instance. If it isn't running yet,
+-- start a one-off with the same look. Falls back to hyprlauncher.
+local drawerFlags = "-i Papirus-Dark -is 72 -c 5 -spacing 24 -nofs -term ghostty"
+local menu = "if ! command -v nwg-drawer >/dev/null; then hyprlauncher; "
+          .. "elif pgrep -x nwg-drawer >/dev/null; then nwg-drawer; "
+          .. "else nwg-drawer " .. drawerFlags .. "; fi"
 
 
 -------------------
@@ -43,6 +51,7 @@ hl.on("hyprland.start", function()
     -- Lid closed + external monitor: built-in screen off (see lid-display).
     hl.exec_cmd("$HOME/.local/bin/lid-display watch")
     hl.exec_cmd("command -v hyprpm >/dev/null && hyprpm reload -n")
+    hl.exec_cmd("command -v nwg-drawer >/dev/null && nwg-drawer -r " .. drawerFlags)
     -- Secret service (org.freedesktop.secrets) for apps that store logins,
     -- e.g. Komikku's server logins. KWallet only registers it once kwalletd6
     -- is running, and that name isn't D-Bus activatable, so start it here.
@@ -172,6 +181,13 @@ hl.config({
         touchpad = {
             natural_scroll = true,
             scroll_factor  = 0.3,
+            -- Two-finger TAP = right click (tap_button_map "lrm").
+            -- Physical presses keep libinput's default: left click, except the
+            -- bottom-right corner = right. Finger count on press is ignored
+            -- (clickfinger off), so a resting second finger can't right-click.
+            clickfinger_behavior = false,
+            tap_to_click         = true,
+            tap_button_map       = "lrm",
         },
     },
 })
