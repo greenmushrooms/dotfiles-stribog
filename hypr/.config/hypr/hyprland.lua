@@ -40,6 +40,8 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("command -v monitor-sensor >/dev/null && $HOME/.local/bin/surface-rotate")
     hl.exec_cmd("command -v squeekboard >/dev/null && squeekboard")
     hl.exec_cmd("command -v squeekboard >/dev/null && $HOME/.local/bin/osk-auto watch")
+    -- Lid closed + external monitor: built-in screen off (see lid-display).
+    hl.exec_cmd("$HOME/.local/bin/lid-display watch")
     hl.exec_cmd("command -v hyprpm >/dev/null && hyprpm reload -n")
 end)
 

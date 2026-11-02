@@ -15,12 +15,16 @@ set -u
 
 STATE="${XDG_RUNTIME_DIR:-/tmp}/osk-tablet-mode"
 KEY="org.gnome.desktop.a11y.applications screen-keyboard-enabled"
-# Hardware keyboards that count. Override for other machines.
-KB_PATTERN=${OSK_KB_PATTERN:-type-cover-keyboard}
+# Any real keyboard counts (Type Cover, or a USB/Bluetooth one like the
+# Keychron). Skip devices that only *look* like keyboards: power/volume
+# buttons, virtual keyboards (squeekboard), and mice that expose a keyboard
+# interface (Razer Pro Click). Override the skip list for other machines.
+KB_IGNORE=${OSK_KB_IGNORE:-'video-bus|gpio-keys|virtual|power|sleep|button|hotkey|wmi|consumer-control|system-control|avrcp|click|mouse'}
 
 has_keyboard() {
   hyprctl devices -j 2>/dev/null \
-    | grep -o '"name": *"[^"]*"' | grep -q -- "$KB_PATTERN"
+    | sed -n '/^"keyboards"/,/^\]/p' \
+    | grep -o '"name": *"[^"]*"' | grep -vE -- "$KB_IGNORE" | grep -q .
 }
 
 refresh() {
@@ -40,6 +44,8 @@ case "${1:-refresh}" in
     refresh
     ;;
   watch)
+    exec 9>"${XDG_RUNTIME_DIR:-/tmp}/osk-auto.lock"
+    flock -n 9 || exit 0   # already running
     refresh
     # Re-check whenever an input device comes or goes (cover attach/detach).
     # Events arrive in bursts, so wait for them to settle before checking.

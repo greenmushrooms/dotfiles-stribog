@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Turn the built-in screen off while the lid (Type Cover) is closed and an
+# external monitor is connected, and back on otherwise. Disabling the output
+# makes Hyprland move its workspaces (and windows) to the external monitor,
+# so you can run the laptop "clamshell" on just the external display.
+#
+#   lid-display watch   keep it in sync (started from hyprland.lua)
+#   lid-display sync    apply once for the current lid/monitor state
+#   lid-display open    force the built-in screen on
+#
+# Hyprland's switch:on/off:Lid Switch binds never fired here (0.57, Lua
+# config), so this polls the ACPI lid state instead; one check a second is
+# cheap. With no external monitor the screen is never disabled, and logind
+# suspends on lid close as usual (it ignores the lid when docked).
+
+set -u
+
+INTERNAL=${LID_INTERNAL_OUTPUT:-eDP-1}
+
+lid_state() {
+    local f
+    for f in /proc/acpi/button/lid/*/state; do
+        [ -r "$f" ] && { awk '{print $2}' "$f"; return; }
+    done
+    echo open
+}
+
+set_internal() {  # set_internal true|false  (true = disabled)
+    local extra=""
+    [ "$1" = false ] && extra=', mode = "preferred", position = "auto", scale = "auto"'
+    hyprctl dispatch "function() hl.monitor({ output = \"$INTERNAL\", disabled = $1$extra }) end" >/dev/null
+}
+
+sync() {
+    local mons externals disabled want
+    mons=$(hyprctl monitors all) || return
+    externals=$(grep '^Monitor ' <<<"$mons" | grep -vc "^Monitor $INTERNAL ")
+    # "disabled: true|false" line inside the internal monitor's block
+    disabled=$(awk -v m="Monitor $INTERNAL " 'index($0, m) == 1 {f=1; next}
+        /^Monitor / {f=0} f && /disabled:/ {print $2; exit}' <<<"$mons")
+    [ -n "$disabled" ] || return 0   # no internal panel known to Hyprland
+
+    if [ "$(lid_state)" = closed ] && [ "$externals" -gt 0 ]; then
+        want=true
+    else
+        want=false
+    fi
+    [ "$disabled" = "$want" ] || set_internal "$want"
+}
+
+case "${1:-sync}" in
+    watch)
+        exec 9>"${XDG_RUNTIME_DIR:-/tmp}/lid-display.lock"
+        flock -n 9 || exit 0   # already running
+        while :; do sync; sleep 1; done
+        ;;
+    sync)  sync ;;
+    open)  set_internal false ;;
+    *)     echo "usage: lid-display [watch|sync|open]" >&2; exit 1 ;;
+esac
