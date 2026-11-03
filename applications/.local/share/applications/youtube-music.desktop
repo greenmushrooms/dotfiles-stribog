@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=YouTube Music
+Comment=Open YouTube Music in Firefox
+Exec=firefox --new-window https://music.youtube.com
+Icon=appimagekit-youtube-music
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=firefox
