@@ -6,6 +6,8 @@
    ignores an ancestor's overflow, opacity and pointer-events. */
 #nav-bar { display: none !important; }
 :root[navbar-visible] #nav-bar { display: flex !important; }
+/* No hardware keyboard: always shown (main.js sets no-hw-keyboard). */
+:root[no-hw-keyboard] #nav-bar { display: flex !important; }
 
 #import-button { display: none !important; }
 

@@ -175,6 +175,41 @@ Services.obs.addObserver(win => {
     true
   );
 
+  // No hardware keyboard (Type Cover detached or folded back): Ctrl+L is
+  // out of reach, so keep the address bar shown. ~/.local/bin/osk-auto keeps
+  // the flag file; poll it, since chrome code can't watch udev.
+  let flag = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+  flag.initWithPath(
+    (Services.env.get("XDG_RUNTIME_DIR") || "/tmp") + "/no-hw-keyboard"
+  );
+  let syncKeyboard = () => {
+    let noKeyboard = flag.exists();
+    if (noKeyboard === root.hasAttribute("no-hw-keyboard")) {
+      return;
+    }
+    root.toggleAttribute("no-hw-keyboard", noKeyboard);
+    navBar.getBoundingClientRect();
+    win.requestAnimationFrame(() =>
+      win.requestAnimationFrame(repositionUrlbar)
+    );
+  };
+  syncKeyboard();
+  let keyboardTimer = win.setInterval(syncKeyboard, 2000);
+  win.addEventListener("unload", () => win.clearInterval(keyboardTimer));
+
+  // Without a keyboard, returning to Firefox (workspace swipe, closing the
+  // drawer) would refocus the last text field -- often the address bar -- and
+  // squeekboard pops up. Drop focus when the window is left, so the keyboard
+  // only opens when a field is actually tapped.
+  win.addEventListener("deactivate", () => {
+    if (flag.exists()) {
+      if (win.gURLBar && win.gURLBar.focused) {
+        win.gURLBar.blur();
+      }
+      Services.focus.clearFocus(win);
+    }
+  });
+
   let input = win.gURLBar && win.gURLBar.inputField;
   if (input) {
     input.addEventListener("blur", hideNavBar);
