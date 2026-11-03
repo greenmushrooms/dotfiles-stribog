@@ -59,7 +59,11 @@ hl.on("hyprland.start", function()
     -- Secret service (org.freedesktop.secrets) for apps that store logins,
     -- e.g. Komikku's server logins. KWallet only registers it once kwalletd6
     -- is running, and that name isn't D-Bus activatable, so start it here.
-    hl.exec_cmd("command -v kwalletd6 >/dev/null && kwalletd6")
+    -- With kwallet-pam installed, pam_kwallet_init starts it already
+    -- unlocked by the login password (SDDM's PAM stack has pam_kwallet5),
+    -- so apps don't ask for the wallet password. Needs wallet pw = login pw.
+    hl.exec_cmd("if [ -x /usr/lib/pam_kwallet_init ]; then /usr/lib/pam_kwallet_init; "
+             .. "elif command -v kwalletd6 >/dev/null; then kwalletd6; fi")
 end)
 
 
