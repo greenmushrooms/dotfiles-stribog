@@ -25,7 +25,7 @@ local browser     = "firefox"
 -- It runs resident (started below) so it opens instantly; calling
 -- `nwg-drawer` again just shows that instance. If it isn't running yet,
 -- start a one-off with the same look. Falls back to hyprlauncher.
-local drawerFlags = "-i Papirus-Dark -is 72 -c 5 -spacing 24 -nofs -term ghostty"
+local drawerFlags = "-i Papirus-Dark -is 72 -c 4 -spacing 24 -nofs -term ghostty"
 local menu = "if ! command -v nwg-drawer >/dev/null; then hyprlauncher; "
           .. "elif pgrep -x nwg-drawer >/dev/null; then nwg-drawer; "
           .. "else nwg-drawer " .. drawerFlags .. "; fi"
@@ -48,10 +48,14 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("command -v monitor-sensor >/dev/null && $HOME/.local/bin/surface-rotate")
     hl.exec_cmd("command -v squeekboard >/dev/null && squeekboard")
     hl.exec_cmd("command -v squeekboard >/dev/null && $HOME/.local/bin/osk-auto watch")
+    -- Tap-to-hide bar on top of the keyboard while it's up (see osk-handle).
+    hl.exec_cmd("command -v squeekboard >/dev/null && $HOME/.local/bin/osk-handle")
     -- Lid closed + external monitor: built-in screen off (see lid-display).
     hl.exec_cmd("$HOME/.local/bin/lid-display watch")
     hl.exec_cmd("command -v hyprpm >/dev/null && hyprpm reload -n")
     hl.exec_cmd("command -v nwg-drawer >/dev/null && nwg-drawer -r " .. drawerFlags)
+    -- Brightness/volume sliders + close button over the drawer (see drawer-qs).
+    hl.exec_cmd("command -v nwg-drawer >/dev/null && $HOME/.local/bin/drawer-qs")
     -- Secret service (org.freedesktop.secrets) for apps that store logins,
     -- e.g. Komikku's server logins. KWallet only registers it once kwalletd6
     -- is running, and that name isn't D-Bus activatable, so start it here.
@@ -350,6 +354,26 @@ hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = tr
 --------------------------------
 ---- WINDOWS AND WORKSPACES ----
 --------------------------------
+
+-- Tablet use (no hardware keyboard, flag kept by osk-auto): every new app
+-- gets its own workspace instead of splitting the screen. Floating windows
+-- (dialogs, pickers) stay where they open.
+local tabletFlag = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/no-hw-keyboard"
+hl.on("window.open", function(w)
+    if not w or w.floating then return end
+    local ws = w.workspace
+    if not ws or ws.special or ws.windows <= 1 then return end
+    local f = io.open(tabletFlag)
+    if not f then return end
+    f:close()
+    hl.dispatch(hl.dsp.window.move({ workspace = "empty", window = "address:" .. (w.address:match("^0x") and "" or "0x") .. w.address }))
+end)
+
+-- Switching workspace: hide the on-screen keyboard at once instead of letting
+-- it flash the next window's layout first (see `osk settle`).
+hl.on("workspace.active", function()
+    hl.exec_cmd(home .. "/.local/bin/osk settle")
+end)
 
 hl.window_rule({
     name           = "suppress-maximize-events",

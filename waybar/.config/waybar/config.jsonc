@@ -7,7 +7,9 @@
         "ext/workspaces"
     ],
     "modules-center": [
-        "hyprland/window"
+        "hyprland/window",
+        "custom/maximize",
+        "custom/close"
     ],
     "modules-right": [
         "cpu",
@@ -39,6 +41,20 @@
     "hyprland/window": {
         "max-length": 60,
         "separate-outputs": true
+    },
+
+    // ── Maximize / restore the active window (toggle) ──────────────
+    "custom/maximize": {
+        "format": "▢",
+        "tooltip": false,
+        "on-click": "hyprctl dispatch 'hl.dsp.window.fullscreen({ mode = 1 })'"
+    },
+
+    // ── Close the active window (touch: no keyboard for Super+Q) ──
+    "custom/close": {
+        "format": "✕",
+        "tooltip": false,
+        "on-click": "hyprctl dispatch 'hl.dsp.window.close()'"
     },
 
     // ── CPU ──────────────────────────────────────────────────────

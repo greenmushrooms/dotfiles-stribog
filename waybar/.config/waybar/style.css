@@ -178,3 +178,19 @@ tooltip {
     border: 1px solid #292e42;
     border-radius: 4px;
 }
+
+/* ── Close button (next to the window title) ─────────────────── */
+
+#custom-maximize,
+#custom-close {
+    color: #f7768e;
+    font-size: 16px;
+    padding: 0 14px;
+    border-radius: 6px;
+}
+
+#custom-maximize:hover,
+#custom-close:hover {
+    background-color: #292e42;
+}
+#custom-maximize { color: #7aa2f7; }

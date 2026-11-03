@@ -1,0 +1,39 @@
+// Quick settings shown along the top of the app drawer (nwg-drawer) while
+// it's open -- phone-style brightness and volume sliders, plus a close
+// button. Started and stopped by ~/.local/bin/drawer-qs.
+{
+    "name": "drawer-qs",
+    "layer": "top",
+    "position": "top",
+    "height": 56,
+    "exclusive": true,
+    "spacing": 8,
+    "modules-left": ["custom/qs-sun", "backlight/slider"],
+    "modules-center": ["custom/qs-vol", "pulseaudio/slider"],
+    "modules-right": ["custom/qs-close"],
+
+    "custom/qs-sun": { "format": "☀", "tooltip": false },
+    "backlight/slider": {
+        "device": "intel_backlight",
+        "min": 3,
+        "max": 100,
+        "orientation": "horizontal"
+    },
+
+    "custom/qs-vol": {
+        "format": "♪",
+        "tooltip": false,
+        "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+    },
+    "pulseaudio/slider": {
+        "min": 0,
+        "max": 100,
+        "orientation": "horizontal"
+    },
+
+    "custom/qs-close": {
+        "format": "✕",
+        "tooltip": false,
+        "on-click": "nwg-drawer -close"
+    }
+}

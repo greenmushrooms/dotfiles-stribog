@@ -1,0 +1,51 @@
+/* Quick-settings bar above the app drawer (drawer-qs.jsonc). */
+* {
+    font-family: sans-serif;
+    font-size: 22px;
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+}
+
+window#waybar {
+    background: rgba(26, 27, 38, 0.96);
+    color: #c0caf5;
+    border-bottom: 1px solid #292e42;
+}
+
+#custom-qs-sun,
+#custom-qs-vol {
+    padding: 0 6px 0 18px;
+    color: #e0af68;
+}
+#custom-qs-vol { color: #7aa2f7; }
+
+/* Big, finger-sized sliders. */
+#backlight-slider,
+#pulseaudio-slider {
+    padding: 0 12px;
+}
+#backlight-slider trough,
+#pulseaudio-slider trough {
+    min-width: 260px;
+    min-height: 14px;
+    border-radius: 7px;
+    background: #292e42;
+}
+#backlight-slider highlight { background: #e0af68; border-radius: 7px; }
+#pulseaudio-slider highlight { background: #7aa2f7; border-radius: 7px; }
+#backlight-slider slider,
+#pulseaudio-slider slider {
+    min-width: 30px;
+    min-height: 30px;
+    margin: -8px 0;
+    border-radius: 15px;
+    background: #c0caf5;
+    box-shadow: none;
+}
+
+#custom-qs-close {
+    color: #f7768e;
+    font-size: 26px;
+    padding: 0 22px;
+}
