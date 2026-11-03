@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# A grab bar on top of the on-screen keyboard: tap it to hide squeekboard.
+# It's a tiny second waybar that only exists while the keyboard is up --
+# started after squeekboard's surface, so Hyprland stacks it right above
+# the keyboard instead of below it.
+#
+#   osk-handle          run the watcher (started from hyprland.lua)
+
+set -u
+
+CFG=$HOME/.config/waybar/osk-handle.jsonc
+CSS=$HOME/.config/waybar/osk-handle.css
+bar=
+
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/osk-handle.lock"
+flock -n 9 || exit 0   # already running
+
+show() {
+  [ -n "$bar" ] && kill -0 "$bar" 2>/dev/null && return
+  waybar -c "$CFG" -s "$CSS" >/dev/null 2>&1 9>&- &
+  bar=$!
+}
+hide() {
+  [ -n "$bar" ] && kill "$bar" 2>/dev/null
+  bar=
+}
+trap 'hide' EXIT
+trap 'exit 0' INT TERM
+
+# Remember, per workspace, whether the keyboard was last up there; `osk
+# settle` reads this on workspace switches.
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/osk-ws"
+mkdir -p "$STATE_DIR"
+remember() {
+  local ws
+  ws=$(hyprctl activeworkspace 2>/dev/null | sed -n '1s/^workspace \([^ ]*\) .*/\1/p')
+  [ -n "$ws" ] && echo "$1" > "$STATE_DIR/$ws"
+}
+
+visible() {
+  busctl --user get-property sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0 Visible 2>/dev/null \
+    | grep -q true
+}
+
+# Follow squeekboard's Visible property; reconnect if squeekboard restarts.
+while :; do
+  if visible; then show; else hide; fi
+  while IFS= read -r line; do
+    case "$line" in
+      *"'Visible': <true>"*)  show; remember true ;;
+      *"'Visible': <false>"*) hide; remember false ;;
+    esac
+  done < <(gdbus monitor --session --dest sm.puri.OSK0 --object-path /sm/puri/OSK0 2>/dev/null 9>&-)
+  sleep 2
+done

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Launch Komikku with errors saved to ~/.cache/komikku.log.
+# -X faulthandler: if it freezes, `pkill -ABRT -f "bin/komikku$"` dumps every
+# thread's Python stack into the log (and ends the frozen app).
+#
+# GTK_IM_MODULE=gtk-im-context-simple: don't use Wayland text-input, so
+# squeekboard no longer pops up whenever a hidden search field grabs focus
+# while reading. The keyboard can still be opened by hand (swipe up from the
+# bottom edge / Super+O) and types into Komikku as usual.
+export GTK_IM_MODULE=gtk-im-context-simple
+exec /usr/bin/python3 -X faulthandler /usr/bin/komikku "$@" 2>>"$HOME/.cache/komikku.log"

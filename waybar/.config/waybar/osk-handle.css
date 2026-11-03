@@ -1,0 +1,25 @@
+/* Grab bar above the on-screen keyboard (osk-handle.jsonc). */
+* {
+    font-family: sans-serif;
+    font-size: 18px;
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+}
+
+window#waybar {
+    background: rgba(26, 26, 26, 0.92);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Wide tap target: most of the screen width. */
+#custom-osk-handle {
+    color: rgba(255, 255, 255, 0.55);
+    min-width: 600px;
+    padding: 0 40px;
+}
+
+#custom-osk-handle:hover {
+    color: #33ccff;
+    background: rgba(255, 255, 255, 0.05);
+}

@@ -14,6 +14,7 @@
 set -u
 
 STATE="${XDG_RUNTIME_DIR:-/tmp}/osk-tablet-mode"
+TABLET_FLAG="${XDG_RUNTIME_DIR:-/tmp}/no-hw-keyboard"
 KEY="org.gnome.desktop.a11y.applications screen-keyboard-enabled"
 # Any real keyboard counts (Type Cover, or a USB/Bluetooth one like the
 # Keychron). Skip devices that only *look* like keyboards: power/volume
@@ -33,6 +34,8 @@ refresh() {
   has_keyboard || want=true
 
   [ "$(gsettings get $KEY)" = "$want" ] || gsettings set $KEY "$want"
+  # Flag for hyprland.lua: in tablet use, new apps open on their own workspace.
+  if [ "$want" = true ]; then : > "$TABLET_FLAG"; else rm -f "$TABLET_FLAG"; fi
   # Cover is back in use: drop a keyboard left open in tablet mode.
   [ "$want" = false ] && "$HOME/.local/bin/osk" hide >/dev/null 2>&1
   return 0
@@ -49,7 +52,7 @@ case "${1:-refresh}" in
     refresh
     # Re-check whenever an input device comes or goes (cover attach/detach).
     # Events arrive in bursts, so wait for them to settle before checking.
-    udevadm monitor --udev --subsystem-match=input 2>/dev/null \
+    udevadm monitor --udev --subsystem-match=input 2>/dev/null 9>&- \
       | while read -r _; do
           while read -r -t 1 _; do :; done
           refresh

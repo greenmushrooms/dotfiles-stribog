@@ -1,0 +1,17 @@
+// Grab bar shown on top of squeekboard by ~/.local/bin/osk-handle.
+// Tap anywhere on it to hide the keyboard.
+{
+    "name": "osk-handle",
+    "layer": "top",
+    "position": "bottom",
+    "height": 40,
+    "exclusive": false,
+    "spacing": 0,
+    "modules-center": ["custom/osk-handle"],
+    "custom/osk-handle": {
+        "format": "────  ⌄  ────",
+        "tooltip": false,
+        "on-click": "~/.local/bin/osk hide",
+        "on-scroll-down": "~/.local/bin/osk hide"
+    }
+}

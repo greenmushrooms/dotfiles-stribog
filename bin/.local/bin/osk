@@ -1,10 +1,30 @@
 #!/usr/bin/env bash
 # Show / hide / toggle the squeekboard on-screen keyboard.
 #   osk [toggle|show|hide]
+#   osk settle    on workspace switch: keep the keyboard if it was up on the
+#                 workspace we're switching to, otherwise drop it at once
 
 set -u
 
 command -v squeekboard >/dev/null || { echo "osk: squeekboard not installed" >&2; exit 1; }
+
+# Workspace switch: squeekboard would first redraw for the new window and
+# only then hide (a visible flash). Turning auto-show off hides it at once;
+# turning it back on re-shows it only if the new window has a focused text
+# field. Unlike SetVisible(false), this doesn't stick to the next window.
+if [ "${1:-}" = settle ]; then
+  key="org.gnome.desktop.a11y.applications screen-keyboard-enabled"
+  [ "$(gsettings get $key)" = true ] || exit 0
+  # Each workspace keeps its own keyboard state (recorded by osk-handle).
+  ws=$(hyprctl activeworkspace 2>/dev/null | sed -n '1s/^workspace \([^ ]*\) .*/\1/p')
+  [ "$(cat "${XDG_RUNTIME_DIR:-/tmp}/osk-ws/$ws" 2>/dev/null)" = true ] && exit 0
+  busctl --user get-property sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0 Visible 2>/dev/null \
+    | grep -q true || exit 0
+  gsettings set $key false
+  sleep 0.4
+  gsettings set $key true
+  exit 0
+fi
 
 # Start squeekboard if it isn't running yet, then wait for its D-Bus name.
 if ! pgrep -x squeekboard >/dev/null; then
