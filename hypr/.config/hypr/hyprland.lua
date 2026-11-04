@@ -53,6 +53,9 @@ hl.on("hyprland.start", function()
     -- Lid closed + external monitor: built-in screen off (see lid-display).
     hl.exec_cmd("$HOME/.local/bin/lid-display watch")
     hl.exec_cmd("command -v hyprpm >/dev/null && hyprpm reload -n")
+    -- Pen use leaves hyprgrass with a stuck finger; reload it after the
+    -- pen leaves the screen (see pen-touch-reset).
+    hl.exec_cmd("command -v iptsd >/dev/null && command -v hyprpm >/dev/null && $HOME/.local/bin/pen-touch-reset")
     hl.exec_cmd("command -v nwg-drawer >/dev/null && nwg-drawer -r " .. drawerFlags)
     -- Brightness/volume sliders + close button over the drawer (see drawer-qs).
     hl.exec_cmd("command -v nwg-drawer >/dev/null && $HOME/.local/bin/drawer-qs")

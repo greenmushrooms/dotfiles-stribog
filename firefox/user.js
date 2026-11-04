@@ -25,3 +25,8 @@ user_pref("extensions.webextensions.fileSchemeAccess.requireOptIn", false);
 user_pref("widget.disable-swipe-tracker", false);
 user_pref("browser.gesture.swipe.left", "Browser:BackOrBackDuplicate");
 user_pref("browser.gesture.swipe.right", "Browser:ForwardOrForwardDuplicate");
+
+// Touchscreen: long-press a word to select it, with drag handles to extend
+// the selection (Firefox only turns these on for Android by default).
+user_pref("layout.accessiblecaret.enabled", true);
+user_pref("layout.accessiblecaret.hide_carets_for_mouse_input", true);

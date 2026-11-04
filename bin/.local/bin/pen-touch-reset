@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""Reset hyprgrass touch gestures after the Surface pen leaves the screen.
+
+While the pen is near the screen, libinput ignores touch. hyprgrass
+misses the finger lift that happens meanwhile and keeps a finger "down",
+so no swipe matches until the plugin is reloaded. This watches the
+iptsd pen device and reloads hyprgrass shortly after the pen goes away.
+
+    pen-touch-reset          run the watcher (started from hyprland.lua)
+    pen-touch-reset now      reset once, right away
+
+Reading /dev/input needs the `input` group.
+"""
+
+import os
+import select
+import struct
+import subprocess
+import sys
+import time
+
+PLUGIN = f"/var/cache/hyprpm/{os.environ.get('USER', 'slava')}/hyprgrass/hyprgrass.so"
+DEVICE_NAME = "IPTSD Virtual Stylus"
+EV_KEY = 0x01
+PEN_TOOLS = {0x140, 0x141}  # BTN_TOOL_PEN, BTN_TOOL_RUBBER
+DELAY = 0.7                 # let libinput's touch arbitration time out first
+EVENT = struct.Struct("llHHi")
+
+
+def reset():
+    for cmd in (["plugin", "unload", PLUGIN], ["plugin", "load", PLUGIN], ["reload"]):
+        subprocess.run(["hyprctl", *cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def find_device():
+    name = None
+    with open("/proc/bus/input/devices") as f:
+        for line in f:
+            if line.startswith("N: Name="):
+                name = line
+            elif line.startswith("H: Handlers=") and name and DEVICE_NAME in name:
+                for h in line.split("=", 1)[1].split():
+                    if h.startswith("event"):
+                        return f"/dev/input/{h}"
+    return None
+
+
+def watch():
+    while True:
+        path = find_device()
+        if not path:
+            time.sleep(5)
+            continue
+        try:
+            fd = os.open(path, os.O_RDONLY)
+        except PermissionError:
+            sys.exit(f"pen-touch-reset: can't read {path}; add yourself to the input group")
+        except OSError:
+            time.sleep(5)
+            continue
+        pending = None  # time at which to reset, once the pen has left
+        try:
+            while True:
+                timeout = None if pending is None else max(0.0, pending - time.monotonic())
+                ready, _, _ = select.select([fd], [], [], timeout)
+                if not ready:
+                    reset()
+                    pending = None
+                    continue
+                data = os.read(fd, EVENT.size * 64)
+                for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
+                    _, _, etype, code, value = EVENT.unpack_from(data, i)
+                    if etype == EV_KEY and code in PEN_TOOLS:
+                        pending = time.monotonic() + DELAY if value == 0 else None
+        except OSError:
+            pass  # device went away (iptsd restart); look for it again
+        finally:
+            os.close(fd)
+        time.sleep(1)
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] == ["now"]:
+        reset()
+    else:
+        watch()
