@@ -1,0 +1,70 @@
+--- /tmp/claude-1000/-home-slava-dotfiles/7c7ee95b-e17b-4eae-ad1a-8b6f545d19f4/scratchpad/tcs/tcs3430.c.orig	2026-11-19 09:37:10.053642292 -0500
++++ tcs3430.c	2026-11-19 09:45:16.699481345 -0500
+@@ -219,6 +219,10 @@
+ 	return ret;
+ }
+ 
++static bool use_irq;
++module_param(use_irq, bool, 0444);
++MODULE_PARM_DESC(use_irq, "Use the sensor interrupt for end of conversion (default: poll)");
++
+ /* State */
+ 
+ static int tcs3430_state_configure_power(struct tcs3430_sensor *sensor)
+@@ -564,9 +568,8 @@
+ 	case IIO_CHAN_INFO_RAW:
+ 		unsigned int scan_index;
+ 
+-		ret = iio_device_claim_direct_mode(iio_dev);
+-		if (ret)
+-			return ret;
++		if (!iio_device_claim_direct(iio_dev))
++			return -EBUSY;
+ 
+ 		ret = pm_runtime_resume_and_get(dev);
+ 		if (ret < 0)
+@@ -587,7 +590,7 @@
+ 		pm_runtime_put_autosuspend(dev);
+ 
+ release_direct_mode:
+-		iio_device_release_direct_mode(iio_dev);
++		iio_device_release_direct(iio_dev);
+ 
+ 		if (ret < 0)
+ 			return ret;
+@@ -904,7 +907,15 @@
+ 	struct device *dev = &client->dev;
+ 	struct tcs3430_sensor *sensor;
+ 	struct iio_dev *iio_dev;
+-	int irq = client->irq;
++	int irq;
++
++	/*
++	 * On Microsoft Surface devices (MSHW0184) the ACPI GpioInt never fires,
++	 * so waiting for it leaves every reading at 0. Poll unless asked not to.
++	 */
++	if (!use_irq)
++		client->irq = 0;
++	irq = client->irq;
+ 	int ret;
+ 
+ 	iio_dev = devm_iio_device_alloc(dev, sizeof(*sensor));
+@@ -979,10 +990,18 @@
+ 
+ MODULE_DEVICE_TABLE(of, tcs3430_of_match);
+ 
++static const struct acpi_device_id tcs3430_acpi_match[] = {
++	{ "MSHW0184" },	/* Microsoft Surface ambient colour sensor */
++	{ }
++};
++
++MODULE_DEVICE_TABLE(acpi, tcs3430_acpi_match);
++
+ static struct i2c_driver tcs3430_driver = {
+ 	.driver = {
+ 		.name		= "tcs3430",
+ 		.of_match_table = tcs3430_of_match,
++		.acpi_match_table = tcs3430_acpi_match,
+ 		.pm		= &tcs3430_pm_ops,
+ 	},
+ 	.id_table	= tcs3430_id,

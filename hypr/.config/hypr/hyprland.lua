@@ -46,6 +46,8 @@ hl.on("hyprland.start", function()
     -- machines without them.
     hl.exec_cmd("command -v hypridle >/dev/null && hypridle")
     hl.exec_cmd("command -v monitor-sensor >/dev/null && $HOME/.local/bin/surface-rotate")
+    -- Backlight follows the light sensor (needs surface-als/ installed).
+    hl.exec_cmd("$HOME/.local/bin/auto-brightness")
     hl.exec_cmd("command -v squeekboard >/dev/null && squeekboard")
     hl.exec_cmd("command -v squeekboard >/dev/null && $HOME/.local/bin/osk-auto watch")
     -- Tap-to-hide bar on top of the keyboard while it's up (see osk-handle).

@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Auto screen brightness from the Surface light sensor (TCS3430, see
+# dotfiles surface-als/). Reads the Y (luminance) channel, smooths it, and
+# eases the backlight towards a target from the CURVE below.
+#
+#   auto-brightness          run (started from hyprland.lua)
+#   auto-brightness pause    stop adjusting (e.g. while hypridle has dimmed)
+#   auto-brightness resume
+#   auto-brightness toggle   on/off; off also survives until toggled back
+#
+# Changing the brightness yourself (keys, slider) is respected: the
+# difference to the curve is kept as an offset, so it stays that much
+# brighter/darker as the light changes. Offset resets on restart.
+
+set -u
+
+RUN="${XDG_RUNTIME_DIR:-/tmp}"
+PAUSE="$RUN/auto-brightness.pause"
+OFF="${XDG_STATE_HOME:-$HOME/.local/state}/auto-brightness.off"
+
+case "${1:-run}" in
+  pause)  : > "$PAUSE"; exit 0 ;;
+  resume) rm -f "$PAUSE"; exit 0 ;;
+  toggle)
+    mkdir -p "$(dirname "$OFF")"
+    if [ -e "$OFF" ]; then rm -f "$OFF"; echo on; else : > "$OFF"; echo off; fi
+    exit 0 ;;
+  run) ;;
+  *) echo "usage: auto-brightness [run|pause|resume|toggle]" >&2; exit 2 ;;
+esac
+
+exec 9>"$RUN/auto-brightness.lock"
+flock -n 9 || exit 0
+
+# Sensor Y at 64x gain -> brightness %. Interpolated on log(Y). Tune here.
+CURVE="0:2 3:4 20:12 60:25 300:45 1500:75 6000:100"
+MIN=1
+INTERVAL=1        # seconds between readings
+SMOOTH=0.3        # 0..1, weight of each new reading
+STEP=3            # max % change per interval (gentle fades)
+
+sensor() {
+  local d
+  for d in /sys/bus/iio/devices/iio:device*; do
+    [ "$(cat "$d/name" 2>/dev/null)" = tcs3430 ] && { echo "$d"; return; }
+  done
+}
+
+cur_pct() { brightnessctl -m | awk -F, '{gsub("%","",$4); print $4}'; }
+
+D=""
+avg=""
+offset=0
+last_set=""
+
+while sleep "$INTERVAL"; do
+  [ -n "$D" ] && [ -e "$D/in_intensity_y_raw" ] || D=$(sensor)
+  [ -n "$D" ] || continue
+  y=$(cat "$D/in_intensity_y_raw" 2>/dev/null) || { D=""; continue; }
+
+  cur=$(cur_pct)
+  if [ -e "$PAUSE" ] || [ -e "$OFF" ]; then last_set=""; continue; fi
+
+  read -r avg target < <(awk -v y="$y" -v avg="$avg" -v a="$SMOOTH" -v curve="$CURVE" -v off="$offset" -v min="$MIN" '
+    BEGIN {
+      avg = (avg == "") ? y : avg + a * (y - avg)
+      n = split(curve, pts, " ")
+      for (i = 1; i <= n; i++) { split(pts[i], p, ":"); X[i] = log(p[1] + 1); P[i] = p[2] }
+      x = log(avg + 1)
+      if (x <= X[1]) t = P[1]
+      else if (x >= X[n]) t = P[n]
+      else for (i = 1; i < n; i++) if (x <= X[i+1]) { t = P[i] + (P[i+1]-P[i]) * (x-X[i]) / (X[i+1]-X[i]); break }
+      t += off
+      if (t < min) t = min; if (t > 100) t = 100
+      printf "%.2f %d\n", avg, t + 0.5
+    }')
+
+  # Someone else changed the brightness since our last write: keep their
+  # choice as an offset from the curve instead of fighting it.
+  if [ -n "$last_set" ] && [ "$cur" != "$last_set" ]; then
+    offset=$(( offset + cur - target ))
+    last_set=$cur
+    continue
+  fi
+
+  [ "$cur" = "$target" ] && { last_set=$cur; continue; }
+  diff=$(( target - cur ))
+  [ "${diff#-}" -le 1 ] && { last_set=$cur; continue; }   # ignore jitter
+  [ "$diff" -gt "$STEP" ] && diff=$STEP
+  [ "$diff" -lt "-$STEP" ] && diff=-$STEP
+  new=$(( cur + diff ))
+  brightnessctl -q set "${new}%"
+  last_set=$(cur_pct)
+done
