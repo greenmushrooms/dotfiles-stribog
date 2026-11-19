@@ -1,0 +1,7 @@
+#!/bin/sh
+# Run Howdy's face match for the user who called this through sudo.
+# Installed root-owned as /usr/local/lib/surface-face/face-check; the sudoers
+# rule allows exactly this, without arguments. Exit 0 = face matched.
+[ "$(id -u)" = 0 ] || exit 1
+[ -n "${SUDO_USER:-}" ] || exit 1
+exec /usr/bin/python /usr/lib/howdy/compare.py "$SUDO_USER"

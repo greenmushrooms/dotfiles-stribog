@@ -21,7 +21,18 @@ CONFIG=/etc/howdy/config.ini
 PAM_LINE="auth sufficient pam_howdy.so"
 PAM_FILES=(/etc/pam.d/sudo /etc/pam.d/hyprlock)
 
+FACE_CHECK=/usr/local/lib/surface-face/face-check
+SUDOERS=/etc/sudoers.d/surface-face
+
 pam_on() {
+	# Face check on wake (lock-screen face): root helper + passwordless rule
+	# for exactly that command with no arguments.
+	install -D -m 755 -o root -g root "$HERE/face-check" "$FACE_CHECK"
+	printf '%s ALL=(root) NOPASSWD: %s ""\n' "$SUDO_USER" "$FACE_CHECK" > "$SUDOERS.tmp"
+	chmod 440 "$SUDOERS.tmp"
+	visudo -cf "$SUDOERS.tmp" >/dev/null && mv "$SUDOERS.tmp" "$SUDOERS" || { rm -f "$SUDOERS.tmp"; echo "sudoers check failed" >&2; exit 1; }
+	echo "face check on wake enabled ($SUDOERS)"
+
 	for f in "${PAM_FILES[@]}"; do
 		grep -q 'pam_howdy.so' "$f" && continue
 		cp -n "$f" "$f.pre-howdy"
@@ -32,6 +43,8 @@ pam_on() {
 }
 
 pam_off() {
+	rm -f /etc/sudoers.d/surface-face /usr/local/lib/surface-face/face-check
+	echo "face check on wake removed"
 	for f in "${PAM_FILES[@]}"; do
 		sed -i '/pam_howdy.so/d' "$f" && echo "face unlock removed from $f"
 	done

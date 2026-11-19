@@ -12,6 +12,41 @@
 
 set -u
 
+# lock-screen face: if the screen is locked, try face unlock (Howdy via the
+# IR camera, see dotfiles surface-face/). Called by hypridle on wake and when
+# the screen comes back on -- not at lock time, so locking while sitting in
+# front of the screen doesn't unlock it straight away.
+if [ "${1:-}" = face ]; then
+  # Like Windows Hello: keep scanning while the lock screen is up, for up to
+  # FACE_WINDOW seconds after wake (each Howdy attempt lasts up to its own
+  # timeout, 4 s), then stop to spare the battery and the IR emitter.
+  FACE_WINDOW=60
+  CHECK=/usr/local/lib/surface-face/face-check
+  LOG="${XDG_RUNTIME_DIR:-/tmp}/lock-screen-face.log"
+  pidof hyprlock >/dev/null && [ -x "$CHECK" ] || exit 0
+  exec 9>"${XDG_RUNTIME_DIR:-/tmp}/lock-screen-face.lock"
+  flock -n 9 || exit 0            # a scan is already running
+  start=$(date +%s%N)
+  ms() { echo $(( ($(date +%s%N) - start) / 1000000 )); }
+  echo "$(date +%T) wake: scanning for up to ${FACE_WINDOW}s" > "$LOG"
+  n=0
+  while pidof hyprlock >/dev/null && [ $(( $(ms) / 1000 )) -lt "$FACE_WINDOW" ]; do
+    n=$((n + 1)); t=$(ms)
+    sudo -n "$CHECK" >/dev/null 2>&1; rc=$?
+    echo "  attempt $n: ${t}-$(ms) ms, exit $rc" >> "$LOG"
+    if [ "$rc" = 0 ]; then
+      pkill -USR1 -x hyprlock
+      echo "  unlocked after $(ms) ms" >> "$LOG"
+      exit 0
+    fi
+    # 10 = no face model, 12 = no user: retrying won't help
+    case "$rc" in 10|12) echo "  howdy not set up (exit $rc)" >> "$LOG"; exit 1 ;; esac
+    sleep 0.3
+  done
+  echo "  gave up after $(ms) ms" >> "$LOG"
+  exit 1
+fi
+
 pidof hyprlock >/dev/null && exit 0
 
 TABLET_FLAG="${XDG_RUNTIME_DIR:-/tmp}/no-hw-keyboard"
