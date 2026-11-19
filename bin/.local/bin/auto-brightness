@@ -1,43 +1,38 @@
 #!/usr/bin/env bash
 # Auto screen brightness from the Surface light sensor (TCS3430, see
 # dotfiles surface-als/). Reads the Y (luminance) channel, smooths it, and
-# eases the backlight towards a target from the CURVE below.
+# eases the backlight towards a brightness curve that learns from you.
 #
 #   auto-brightness          run (started from hyprland.lua)
-#   auto-brightness pause    stop adjusting (e.g. while hypridle has dimmed)
-#   auto-brightness resume
-#   auto-brightness toggle   on/off; off also survives until toggled back
+#   auto-brightness show     print the curve and the current reading
+#   auto-brightness reset    forget what it learned (back to the default curve)
+#   auto-brightness toggle   on/off (off survives until toggled back)
+#   auto-brightness pause | resume   hold off temporarily (hypridle dim)
 #
-# Changing the brightness yourself (keys, slider) is respected: the
-# difference to the curve is kept as an offset, so it stays that much
-# brighter/darker as the light changes. Offset resets on restart.
+# Learning, like phone adaptive brightness: when you change the brightness
+# yourself (keys, slider) and leave it for a couple of seconds, the curve is
+# bent towards your choice at the current light level, with neighbouring
+# light levels following a little and far-away ones not at all. The curve
+# is saved, so it keeps improving across reboots.
 
 set -u
 
 RUN="${XDG_RUNTIME_DIR:-/tmp}"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}"
 PAUSE="$RUN/auto-brightness.pause"
-OFF="${XDG_STATE_HOME:-$HOME/.local/state}/auto-brightness.off"
+OFF="$STATE/auto-brightness.off"
+CURVE_FILE="$STATE/auto-brightness.curve"
 
-case "${1:-run}" in
-  pause)  : > "$PAUSE"; exit 0 ;;
-  resume) rm -f "$PAUSE"; exit 0 ;;
-  toggle)
-    mkdir -p "$(dirname "$OFF")"
-    if [ -e "$OFF" ]; then rm -f "$OFF"; echo on; else : > "$OFF"; echo off; fi
-    exit 0 ;;
-  run) ;;
-  *) echo "usage: auto-brightness [run|pause|resume|toggle]" >&2; exit 2 ;;
-esac
-
-exec 9>"$RUN/auto-brightness.lock"
-flock -n 9 || exit 0
-
-# Sensor Y at 64x gain -> brightness %. Interpolated on log(Y). Tune here.
-CURVE="0:2 3:4 20:12 60:25 300:45 1500:75 6000:100"
+# Sensor Y at 64x gain : brightness %. Interpolated on log(Y).
+DEFAULT_CURVE="0:2 3:4 10:8 20:12 40:18 60:25 120:32 300:45 700:58 1500:75 3500:90 6000:100"
 MIN=1
 INTERVAL=1        # seconds between readings
 SMOOTH=0.3        # 0..1, weight of each new reading
 STEP=3            # max % change per interval (gentle fades)
+SETTLE=2          # seconds a manual change must hold before it is learned
+SPREAD=0.8        # how far (in log light) a lesson reaches neighbours
+
+curve() { cat "$CURVE_FILE" 2>/dev/null || echo "$DEFAULT_CURVE"; }
 
 sensor() {
   local d
@@ -48,10 +43,72 @@ sensor() {
 
 cur_pct() { brightnessctl -m | awk -F, '{gsub("%","",$4); print $4}'; }
 
+# awk helpers shared by every mode: parse the curve, interpolate on log(Y).
+AWK_LIB='
+function load(c,   n, i, pts, p) {
+  n = split(c, pts, " ")
+  for (i = 1; i <= n; i++) { split(pts[i], p, ":"); Y[i] = p[1]; X[i] = log(p[1] + 1); P[i] = p[2] }
+  return n
+}
+function at(x, n,   i) {
+  if (x <= X[1]) return P[1]
+  if (x >= X[n]) return P[n]
+  for (i = 1; i < n; i++) if (x <= X[i+1]) return P[i] + (P[i+1]-P[i]) * (x-X[i]) / (X[i+1]-X[i])
+}
+'
+
+case "${1:-run}" in
+  pause)  : > "$PAUSE"; exit 0 ;;
+  resume) rm -f "$PAUSE"; exit 0 ;;
+  reset)  rm -f "$CURVE_FILE"; echo "curve reset to default"; exit 0 ;;
+  toggle)
+    mkdir -p "$STATE"
+    if [ -e "$OFF" ]; then rm -f "$OFF"; echo on; else : > "$OFF"; echo off; fi
+    exit 0 ;;
+  show)
+    d=$(sensor); y=$([ -n "$d" ] && cat "$d/in_intensity_y_raw" || echo "?")
+    echo "state: $([ -e "$OFF" ] && echo off || echo on)$([ -e "$PAUSE" ] && echo ", paused")   curve: $([ -e "$CURVE_FILE" ] && echo learned || echo default)"
+    echo "light Y=$y   brightness now $(cur_pct)%"
+    curve | tr ' ' '\n' | awk -F: '{printf "  Y %5s -> %3s%%\n", $1, $2}'
+    exit 0 ;;
+  run) ;;
+  *) echo "usage: auto-brightness [run|show|reset|toggle|pause|resume]" >&2; exit 2 ;;
+esac
+
+exec 9>"$RUN/auto-brightness.lock"
+flock -n 9 || exit 0
+mkdir -p "$STATE"
+
+# Bend the curve so that light level avg maps to brightness want.
+learn() {
+  local avg=$1 want=$2 new
+  new=$(awk -v c="$(curve)" -v avg="$avg" -v want="$want" -v s="$SPREAD" -v min="$MIN" "$AWK_LIB"'
+    BEGIN {
+      n = load(c); x = log(avg + 1)
+      # nearest curve point
+      j = 1; for (i = 2; i <= n; i++) if ((X[i]-x)^2 < (X[j]-x)^2) j = i
+      # a few passes so the interpolated value really lands on want
+      for (k = 0; k < 4; k++) {
+        err = want - at(x, n)
+        for (i = 1; i <= n; i++) P[i] += err * exp(-((X[i]-x)^2) / (2*s*s))
+      }
+      # keep it monotonic: brighter light never gives a dimmer screen
+      for (i = j+1; i <= n; i++) if (P[i] < P[i-1]) P[i] = P[i-1]
+      for (i = j-1; i >= 1; i--) if (P[i] > P[i+1]) P[i] = P[i+1]
+      for (i = 1; i <= n; i++) {
+        if (P[i] < min) P[i] = min; if (P[i] > 100) P[i] = 100
+        printf "%s%s:%d", (i > 1 ? " " : ""), Y[i], P[i] + 0.5
+      }
+      print ""
+    }')
+  [ -n "$new" ] && printf '%s\n' "$new" > "$CURVE_FILE.tmp" && mv "$CURVE_FILE.tmp" "$CURVE_FILE"
+}
+
 D=""
 avg=""
-offset=0
 last_set=""
+pending=""
+pending_for=0
 
 while sleep "$INTERVAL"; do
   [ -n "$D" ] && [ -e "$D/in_intensity_y_raw" ] || D=$(sensor)
@@ -59,36 +116,35 @@ while sleep "$INTERVAL"; do
   y=$(cat "$D/in_intensity_y_raw" 2>/dev/null) || { D=""; continue; }
 
   cur=$(cur_pct)
-  if [ -e "$PAUSE" ] || [ -e "$OFF" ]; then last_set=""; continue; fi
+  if [ -e "$PAUSE" ] || [ -e "$OFF" ]; then last_set=""; pending=""; continue; fi
 
-  read -r avg target < <(awk -v y="$y" -v avg="$avg" -v a="$SMOOTH" -v curve="$CURVE" -v off="$offset" -v min="$MIN" '
-    BEGIN {
-      avg = (avg == "") ? y : avg + a * (y - avg)
-      n = split(curve, pts, " ")
-      for (i = 1; i <= n; i++) { split(pts[i], p, ":"); X[i] = log(p[1] + 1); P[i] = p[2] }
-      x = log(avg + 1)
-      if (x <= X[1]) t = P[1]
-      else if (x >= X[n]) t = P[n]
-      else for (i = 1; i < n; i++) if (x <= X[i+1]) { t = P[i] + (P[i+1]-P[i]) * (x-X[i]) / (X[i+1]-X[i]); break }
-      t += off
-      if (t < min) t = min; if (t > 100) t = 100
-      printf "%.2f %d\n", avg, t + 0.5
-    }')
+  # Smooth the light reading (not while a manual change is settling, so the
+  # lesson is tied to the light you made it in).
+  [ -z "$pending" ] && avg=$(awk -v y="$y" -v a="$avg" -v k="$SMOOTH" \
+    'BEGIN { printf "%.2f", (a == "") ? y : a + k * (y - a) }')
 
-  # Someone else changed the brightness since our last write: keep their
-  # choice as an offset from the curve instead of fighting it.
+  # Manual change: wait until it holds still for SETTLE seconds, then learn.
   if [ -n "$last_set" ] && [ "$cur" != "$last_set" ]; then
-    offset=$(( offset + cur - target ))
-    last_set=$cur
+    if [ "$cur" = "$pending" ]; then
+      pending_for=$(( pending_for + INTERVAL ))
+    else
+      pending=$cur; pending_for=0
+    fi
+    if [ "$pending_for" -ge "$SETTLE" ]; then
+      learn "$avg" "$cur"
+      last_set=$cur; pending=""
+    fi
     continue
   fi
+  pending=""
 
-  [ "$cur" = "$target" ] && { last_set=$cur; continue; }
+  target=$(awk -v c="$(curve)" -v avg="$avg" -v min="$MIN" "$AWK_LIB"'
+    BEGIN { n = load(c); t = at(log(avg + 1), n); if (t < min) t = min; printf "%d", t + 0.5 }')
+
   diff=$(( target - cur ))
-  [ "${diff#-}" -le 1 ] && { last_set=$cur; continue; }   # ignore jitter
+  if [ "${diff#-}" -le 1 ]; then last_set=$cur; continue; fi   # close enough
   [ "$diff" -gt "$STEP" ] && diff=$STEP
   [ "$diff" -lt "-$STEP" ] && diff=-$STEP
-  new=$(( cur + diff ))
-  brightnessctl -q set "${new}%"
+  brightnessctl -q set "$(( cur + diff ))%"
   last_set=$(cur_pct)
 done
