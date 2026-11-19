@@ -1,0 +1,60 @@
+--- a/src/intel-ipu4/drivers/media/pci/intel/ipu-isys.c	2026-11-19 10:06:34.557172357 -0500
++++ b/src/intel-ipu4/drivers/media/pci/intel/ipu-isys.c	2026-11-19 09:57:41.298944156 -0500
+@@ -33,7 +33,8 @@
+ #include "ipu-platform.h"
+ #include "ipu-platform-buttress-regs.h"
+ 
+-#define ISYS_PM_QOS_VALUE	300
++/* 100, not 300: Ice Lake C2 exit (253 us) stalls the IR camera stream. */
++#define ISYS_PM_QOS_VALUE	100
+ 
+ int ipu_isys_force_power_cycle(struct ipu_isys *isys)
+ {
+--- a/src/intel-ipu4/drivers/media/pci/intel/ipu4/ipu4p-isys-csi2.c	2026-11-19 10:06:34.594539680 -0500
++++ b/src/intel-ipu4/drivers/media/pci/intel/ipu4/ipu4p-isys-csi2.c	2026-11-19 09:57:41.299816185 -0500
+@@ -65,6 +65,34 @@
+ }
+ 
+ /*
++ * Surface Pro 7 IR camera (OV7251, CSI-2 index 1 = source 6, one lane) needs
++ * the same shifted data-lane timing as the front camera: Windows'
++ * data_ticks = 1360 - 32000 / F_MHz, 1269 at 350 MHz. From surface-kit's
++ * 0005-ipu4p-surface-pro-7-ir-camera.patch (linux-surface discussion #1353).
++ */
++static bool ipu4p_csi2_apply_source6_ir_timing(struct ipu_isys_csi2 *csi2,
++					       unsigned int nlanes)
++{
++	const struct ipu4p_isys_quirks *quirks;
++	unsigned int i;
++
++	quirks = ipu4p_isys_get_quirks(&csi2->isys->adev->dev);
++	if (!quirks || csi2->index != 1 || nlanes != 1 ||
++	    csi2->asd.source != IPU_FW_ISYS_STREAM_SRC_CSI2_PORT0 + 6)
++		return false;
++
++	for (i = 0; i < nlanes; i++) {
++		writel(0, csi2->base + 0x38 + i * 8);
++		writel(quirks->front_mipi_timing.data_ticks,
++		       csi2->base + 0x3c + i * 8);
++	}
++	dev_dbg(&csi2->isys->adev->dev,
++		"source-6 IR data timing quirk applied: %u ticks\n",
++		quirks->front_mipi_timing.data_ticks);
++	return true;
++}
++
++/*
+  * The source-6 failure is now beyond the sensor probe and generic receiver
+  * timing layers.  Record the surrounding IPU4P GPREG state without changing
+  * it so a Linux start can be compared with the original Windows sequence.
+@@ -372,7 +400,9 @@
+ 	writel(timing.csettle,
+ 		   csi2->base + CSI2_REG_CSI_RX_DLY_CNT_SETTLE_CLANE);
+ 
+-	if (!ipu4p_csi2_apply_source7_mipi_timing(csi2)) {
++	if (ipu4p_csi2_apply_source6_ir_timing(csi2, nlanes)) {
++		/* IR camera: data-lane timing set, clock lane stays generic. */
++	} else if (!ipu4p_csi2_apply_source7_mipi_timing(csi2)) {
+ 		for (i = 0; i < nlanes; i++) {
+ 			writel
+ 			    (timing.dtermen,

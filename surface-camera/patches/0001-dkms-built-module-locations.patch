@@ -1,0 +1,23 @@
+--- a/dkms.conf	2026-11-19 10:06:34.555172383 -0500
++++ b/dkms.conf	2026-11-18 20:24:59.994604189 -0500
+@@ -15,7 +15,6 @@
+ # Both build stages are driven by the top-level Makefile: the IPU4P ISP stack
+ # from src/intel-ipu4/ and the sensor/ACPI modules from the root Kbuild.
+ MAKE[0]="make KERNEL_VERSION=${kernelver} KDIR=/lib/modules/${kernelver}/build modules"
+-CLEAN="make KERNEL_VERSION=${kernelver} clean"
+ 
+ BUILT_MODULE_NAME[0]="intel-ipu4"
+ BUILT_MODULE_NAME[1]="intel-ipu4-isys"
+@@ -27,6 +26,12 @@
+ BUILT_MODULE_NAME[7]="ov7251"
+ BUILT_MODULE_NAME[8]="surfacepro7_acpi"
+ 
++BUILT_MODULE_LOCATION[0]="src/intel-ipu4/drivers/media/pci/intel/ipu4"
++BUILT_MODULE_LOCATION[1]="src/intel-ipu4/drivers/media/pci/intel/ipu4"
++BUILT_MODULE_LOCATION[2]="src/intel-ipu4/drivers/media/pci/intel/ipu4"
++BUILT_MODULE_LOCATION[3]="src/intel-ipu4/drivers/media/pci/intel/ipu4"
++BUILT_MODULE_LOCATION[4]="src/intel-ipu4/drivers/media/pci/intel/ipu4/ipu4p-css/lib2600psys"
++
+ DEST_MODULE_LOCATION[0]="/extra/surfacepro7-camera-ir"
+ DEST_MODULE_LOCATION[1]="/extra/surfacepro7-camera-ir"
+ DEST_MODULE_LOCATION[2]="/extra/surfacepro7-camera-ir"

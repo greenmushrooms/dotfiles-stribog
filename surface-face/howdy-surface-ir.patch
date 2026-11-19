@@ -1,0 +1,28 @@
+diff --git a/howdy/src/meson.build b/howdy/src/meson.build
+index 9dae3c2..b8711bf 100644
+--- a/howdy/src/meson.build
++++ b/howdy/src/meson.build
+@@ -38,6 +38,7 @@ py_sources = {
+         'recorders/__init__.py',
+         'recorders/ffmpeg_reader.py',
+         'recorders/pyv4l2_reader.py',
++        'recorders/surface_ir_reader.py',
+         'recorders/v4l2.py',
+         'recorders/video_capture.py',
+     ],
+diff --git a/howdy/src/recorders/video_capture.py b/howdy/src/recorders/video_capture.py
+index 59265fb..e5ce90e 100644
+--- a/howdy/src/recorders/video_capture.py
++++ b/howdy/src/recorders/video_capture.py
+@@ -137,6 +137,11 @@ class VideoCapture:
+ 				self.config.get("video", "device_format", fallback="v4l2")
+ 			)
+ 
++		elif recording_plugin == "surface_ir":
++			# Surface Pro 7 IR camera (IPU4P media pipeline, raw Y10)
++			from recorders.surface_ir_reader import surface_ir_reader
++			self.internal = surface_ir_reader(self.config.get("video", "device_path"))
++
+ 		else:
+ 			# Start video capture on the IR camera through OpenCV
+ 			self.internal = cv2.VideoCapture(
