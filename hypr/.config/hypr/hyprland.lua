@@ -408,6 +408,14 @@ hl.window_rule({
     float = true,
 })
 
+-- On-screen keyboard for the lock screen (see lock-screen): draw wvkbd above
+-- hyprlock and let it take touches (2 = above lock + interactable).
+hl.layer_rule({
+    name       = "wvkbd-above-lock",
+    match      = { namespace = "^wvkbd$" },
+    above_lock = 2,
+})
+
 hl.window_rule({
     name  = "float-wifi-menu",
     match = { class = "wifi-menu" },

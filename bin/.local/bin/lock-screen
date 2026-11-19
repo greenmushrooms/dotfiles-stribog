@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Lock the session with hyprlock, plus an on-screen keyboard for tablet use.
+#
+# squeekboard sits on the "top" layer, which the session lock covers, so it
+# can't be used to type the password. wvkbd sits on the "overlay" layer and
+# does show above hyprlock. It runs only while locked and is shown whenever
+# there is no hardware keyboard (the no-hw-keyboard flag kept by osk-auto),
+# so folding/detaching the Type Cover while locked brings it up.
+#
+# Called by hypridle's lock_cmd (loginctl lock-session, SUPER+CTRL+L, idle,
+# before sleep).
+
+set -u
+
+pidof hyprlock >/dev/null && exit 0
+
+TABLET_FLAG="${XDG_RUNTIME_DIR:-/tmp}/no-hw-keyboard"
+OSK=wvkbd-mobintl
+
+kb=""
+if command -v "$OSK" >/dev/null; then
+  "$OSK" --hidden -L 300 >/dev/null 2>&1 &
+  kb=$!
+  # squeekboard under the lock would only steal space once unlocked.
+  "$HOME/.local/bin/osk" hide >/dev/null 2>&1
+fi
+
+hyprlock &
+lock=$!
+
+if [ -n "$kb" ]; then
+  shown=""
+  while kill -0 "$lock" 2>/dev/null; do
+    want=hide; [ -e "$TABLET_FLAG" ] && want=show
+    if [ "$want" != "$shown" ]; then
+      # wvkbd: SIGUSR1 hides, SIGUSR2 shows.
+      if [ "$want" = show ]; then kill -USR2 "$kb"; else kill -USR1 "$kb"; fi 2>/dev/null
+      shown=$want
+    fi
+    sleep 0.5
+  done
+  kill "$kb" 2>/dev/null
+fi
+
+wait "$lock"
