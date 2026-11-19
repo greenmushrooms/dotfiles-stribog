@@ -17,6 +17,7 @@
         "network",
         "custom/vpn",
         "pulseaudio",
+        "power-profiles-daemon",
         "battery",
         "clock",
         "tray"
@@ -124,6 +125,20 @@
         },
         "on-click": "pavucontrol",
         "scroll-step": 2
+    },
+
+    // ── Power profile (power-profiles-daemon) ─────────────────────
+    // Tap cycles performance -> balanced -> power-saver.
+    "power-profiles-daemon": {
+        "format": "{icon}",
+        "tooltip-format": "Power profile: {profile}\nDriver: {driver}\n\nTap to cycle",
+        "tooltip": true,
+        "format-icons": {
+            "default": "\uf0e7",
+            "performance": "\uf0e7",
+            "balanced": "\uf24e",
+            "power-saver": "\uf06c"
+        }
     },
 
     // ── Battery ──────────────────────────────────────────────────

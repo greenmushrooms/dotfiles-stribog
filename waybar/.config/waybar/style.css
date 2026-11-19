@@ -72,6 +72,7 @@ window#waybar {
 #network,
 #custom-vpn,
 #pulseaudio,
+#power-profiles-daemon,
 #battery,
 #clock,
 #tray {
@@ -85,6 +86,7 @@ window#waybar {
 #network,
 #custom-vpn,
 #pulseaudio,
+#power-profiles-daemon,
 #battery,
 #clock {
     border-left: 1px solid #292e42;
@@ -132,6 +134,19 @@ window#waybar {
 
 #pulseaudio.muted {
     color: #565f89;
+}
+
+/* Power profile: orange = performance, dim = balanced, green = saver. */
+#power-profiles-daemon.performance {
+    color: #ff9e64;
+}
+
+#power-profiles-daemon.balanced {
+    color: #565f89;
+}
+
+#power-profiles-daemon.power-saver {
+    color: #9ece6a;
 }
 
 #battery {
